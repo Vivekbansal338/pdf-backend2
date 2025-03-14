@@ -211,7 +211,7 @@ async function processPDF(filePath, userId, documentName, link) {
         if (page.images && page.images.length > 0) {
           for (const image of page.images) {
             totalImages++;
-            console.log(image);
+            // console.log(image);
             const imageId = `${documentId}_page${pageNumber}_img_${
               image.id || totalImages
             }`;
