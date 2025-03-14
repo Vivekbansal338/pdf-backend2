@@ -1,0 +1,413 @@
+# PDF RAG API - Comprehensive Project Notes
+
+## Project Overview
+This is a RESTful API service for processing PDF documents using Retrieval Augmented Generation (RAG) with Mistral AI capabilities. The system enables document upload, OCR processing, vector storage, and AI-powered question answering based on document content.
+
+## Core Technologies
+- Backend: Node.js with Express
+- Database: MongoDB with vector search capabilities
+- AI Services: 
+  - Mistral AI for OCR processing
+  - Mistral AI Embeddings for vector creation
+  - Mistral Medium model for chat responses
+- Storage: Supabase for PDF file storage
+- Authentication: JWT tokens
+- Text Processing: LangChain for text splitting
+
+## System Architecture
+The application follows a modular architecture with:
+- Controllers: Handle HTTP requests/responses
+- Services: Contain core business logic
+- Routes: Define API endpoints
+- Middleware: Process requests before reaching routes
+- Models: Define data structures (MongoDB collections)
+
+## Main Workflow Breakdown
+
+### 1. Authentication Flow
+- User requests a token from `/api/auth/token`
+- System generates a UUID-based user ID and creates a JWT token
+- Token is returned to the user
+- All protected endpoints require this token in the Authorization header
+
+### 2. Document Processing Flow
+- User uploads a PDF file to `/api/documents/upload` with their auth token
+- File is temporarily stored on the server
+- File is uploaded to Supabase for permanent storage
+- Mistral OCR processes the PDF content
+- Text is split into chunks using LangChain's RecursiveCharacterTextSplitter
+- Embeddings are generated for each chunk using Mistral AI
+- Chunks and embeddings are stored in MongoDB
+- Vector search index is created/updated
+- Temporary file is deleted
+- Document metadata is stored in MongoDB
+
+### 3. Chat/Query Flow
+- User sends a query and document ID to `/api/chat/chat`
+- Query is converted to an embedding vector
+- Vector search finds relevant document chunks
+- Relevant chunks form context for the LLM
+- Mistral AI generates response based on context
+- Citations are provided with the response
+- Chat history is recorded in database
+
+## Database Schema
+
+### MongoDB Collections:
+1. **documents**: Stores document metadata
+   - _id: ObjectId
+   - name: String (document name)
+   - userId: String
+   - uploadDate: Date
+   - status: String (processing/ready)
+   - chunkCount: Number
+   - link: String (Supabase URL)
+
+2. **document_chunks**: Stores document chunks with embeddings
+   - _id: ObjectId
+   - documentId: ObjectId (reference to documents collection)
+   - userId: String
+   - content: String (chunk text content)
+   - metadata: Object (page number, etc.)
+   - embedding: Array (1024-dimensional vector)
+   - createdAt: Date
+
+3. **chatHistory**: Stores chat interactions
+   - _id: ObjectId
+   - userId: String
+   - documentId: ObjectId
+   - query: String
+   - answer: String
+   - citations: Array
+   - timestamp: Date
+
+## API Endpoints
+
+### Authentication
+- `GET/POST /api/auth/token` - Generate authentication token
+- `GET /api/auth/verify` - Verify token validity
+
+### Documents
+- `POST /api/documents/upload` - Upload a PDF document
+- `GET /api/documents` - List all user documents
+- `GET /api/documents/:id` - Get document by ID
+
+### Chat
+- `POST /api/chat/chat` - Send a query and get a response
+- `GET /api/chat/history/:documentId` - Get chat history for a document
+
+## Technical Implementation Details
+
+### Embedding and Vector Search
+The system uses:
+- Mistral AI embeddings to convert text chunks into 1024-dimensional vectors
+- MongoDB's $vectorSearch operator to find semantically similar content
+- Cosine similarity to measure relevance between query and document chunks
+
+### RAG Implementation
+The Retrieval Augmented Generation pattern is implemented through:
+1. **Retrieval**: Using vector search to find relevant document chunks
+2. **Augmentation**: Creating a prompt that includes retrieved context
+3. **Generation**: Using Mistral Medium to generate a response based on context
+
+### PDF Processing
+The PDF processing pipeline:
+1. Uses Mistral's OCR capabilities to extract text and structure
+2. Preserves page metadata for citations
+3. Splits text into chunks with overlap to maintain context across chunks
+4. Generates embeddings for efficient semantic search
+
+### Example RAG Workflow with Dummy Data
+
+Imagine a user (id: user123) uploads a PDF about "Climate Change Policies":
+
+1. **Authentication**:
+   - Request: GET /api/auth/token
+   - Response: { "token": "eyJhbGciOi..." }
+
+2. **Document Upload**:
+   - Request: POST /api/documents/upload with PDF file
+   - Response: {
+       "documentId": "60a2b3c4d5e6f7g8h9i0j1k2",
+       "pageCount": 15,
+       "fileName": "Climate_Change_Policies.pdf",
+       "link": "https://supabase.storage/..."
+     }
+
+3. **Background Processing**:
+   - System extracts text from PDF pages
+   - Text is split into chunks (~1000 characters each)
+   - Each chunk gets metadata (page number, etc.)
+   - Embeddings are generated for each chunk
+   - Chunks and embeddings are stored in MongoDB
+
+4. **User Query**:
+   - Request: POST /api/chat/chat
+     {
+       "documentId": "60a2b3c4d5e6f7g8h9i0j1k2",
+       "query": "What are the main carbon reduction strategies mentioned in the document?"
+     }
+   - System converts query to embedding
+   - Vector search finds 5 most relevant chunks
+   - Context is created from these chunks
+   - Prompt is sent to Mistral AI: "Context: [chunk1, chunk2, ...]\n\nQuestion: What are the main carbon reduction strategies...?"
+   - Response is generated based only on the provided context
+   - Response: {
+       "answer": "According to the document, the main carbon reduction strategies are: 1) Renewable energy transition, 2) Energy efficiency improvements, 3) Carbon capture and storage, 4) Sustainable transportation, and 5) Reforestation initiatives...",
+       "citations": [
+         { "id": 1, "page": 4, "text": "The primary strategies for carbon reduction fall into five categories...", "score": 0.92 },
+         { "id": 2, "page": 7, "text": "Renewable energy transition represents the most significant opportunity...", "score": 0.87 },
+         ...
+       ]
+     }
+
+5. **Chat History**:
+   - System stores the query, answer, and citations in the chatHistory collection
+   - User can retrieve this history: GET /api/chat/history/60a2b3c4d5e6f7g8h9i0j1k2
+
+## Technical Challenges and Solutions
+
+### Vector Search Optimization
+- MongoDB's vector search index is used for efficient similarity search
+- numCandidates parameter (100) expands the initial search space
+- limit parameter (5) restricts to most relevant results
+- Scoring helps prioritize the most relevant content
+
+### Context Window Management
+- 1000-character chunks with 200-character overlap balance:
+  - Small enough to fit many in context window
+  - Large enough to maintain coherent information
+  - Overlap preserves context across chunk boundaries
+
+### Error Handling
+- Global error handler provides consistent error responses
+- Specific error handling for file operations, database operations, and AI service calls
+- Temporary file cleanup ensures server storage isn't filled
+
+## Scalability Considerations
+- MongoDB's vector search scales to millions of documents
+- Document processing is handled synchronously but could be moved to a queue system
+- Stateless authentication allows for horizontal scaling
+
+## Security Aspects
+- JWT authentication secures all endpoints
+- User isolation ensures users can only access their own documents
+- File type validation prevents non-PDF uploads
+- File size limits prevent abuse
+
+## Potential Enhancements
+- Implement batch processing for large documents
+- Add user management with proper authentication
+- Implement streaming responses for chat
+- Add document deletion functionality
+- Implement more sophisticated chunking strategies based on document structure
+- Add support for more document types beyond PDFs
+
+## Detailed Workflow with Example Data
+
+### Document Processing Flow Example
+
+Let's follow a specific example where a user uploads a PDF about "Climate Change Policies":
+
+#### 1. User uploads PDF to `/api/documents/upload`
+```json
+// Request
+POST /api/documents/upload
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: multipart/form-data
+Body: [Climate_Change_Policies.pdf]
+```
+
+#### 2. File is temporarily stored on server
+The system creates a temporary file:
+```
+/tmp/uploads/1679324587_Climate_Change_Policies.pdf
+```
+
+#### 3. Supabase storage upload
+```json
+// Data in Supabase storage
+URL: https://supabase.storage/object/public/pdfs/user123/Climate_Change_Policies.pdf
+Size: 2.4MB
+Metadata: { contentType: "application/pdf", createdAt: "2025-03-13T10:15:30Z" }
+```
+
+#### 4. Mistral OCR extracts text
+```
+// OCR output example (first page excerpt)
+"CLIMATE CHANGE POLICIES
+Global Initiatives and Strategies
+
+Executive Summary
+This report outlines the primary carbon reduction strategies implemented globally...
+
+Section 1: Renewable Energy Transition
+The shift to renewable energy sources represents the most significant opportunity..."
+```
+
+#### 5. Text is split into chunks
+```
+// Chunk example
+Chunk #1:
+"CLIMATE CHANGE POLICIES
+Global Initiatives and Strategies
+
+Executive Summary
+This report outlines the primary carbon reduction strategies implemented globally..."
+
+Chunk #2:
+"...carbon reduction strategies implemented globally...
+
+Section 1: Renewable Energy Transition
+The shift to renewable energy sources represents the most significant opportunity..."
+```
+
+#### 6. Embeddings generation
+```json
+// Embedding vector (truncated) for Chunk #1
+[0.025, -0.104, 0.367, ..., 0.092]
+```
+
+#### 7. MongoDB storage
+```json
+// document_chunks collection entry
+{
+  "_id": ObjectId("60f3a2c1d4e5f6a7b8c9d0e1"),
+  "documentId": ObjectId("60f3a2c1d4e5f6a7b8c9d001"),
+  "userId": "user123",
+  "content": "CLIMATE CHANGE POLICIES\nGlobal Initiatives and Strategies\n\nExecutive Summary\nThis report outlines the primary carbon reduction strategies implemented globally...",
+  "metadata": {
+    "page": 1,
+    "position": 0
+  },
+  "embedding": [0.025, -0.104, 0.367, ..., 0.092],
+  "createdAt": "2025-03-13T10:16:45Z"
+}
+```
+
+#### 8. Vector search index creation
+MongoDB creates/updates vector index on the `embedding` field
+
+#### 9. Temporary file deletion
+System removes file at `/tmp/uploads/1679324587_Climate_Change_Policies.pdf`
+
+#### 10. Document metadata stored
+```json
+// documents collection
+{
+  "_id": ObjectId("60f3a2c1d4e5f6a7b8c9d001"),
+  "name": "Climate_Change_Policies.pdf",
+  "userId": "user123",
+  "uploadDate": "2025-03-13T10:15:30Z",
+  "status": "ready",
+  "chunkCount": 24,
+  "link": "https://supabase.storage/object/public/pdfs/user123/Climate_Change_Policies.pdf"
+}
+```
+
+### Chat/Query Flow Example
+
+#### 1. User sends query to `/api/chat/chat`
+```json
+// Request
+POST /api/chat/chat
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+{
+  "documentId": "60f3a2c1d4e5f6a7b8c9d001",
+  "query": "What are the main carbon reduction strategies mentioned in the document?"
+}
+```
+
+#### 2. Query converted to embedding vector
+```json
+// Query embedding (truncated)
+[0.041, -0.128, 0.332, ..., 0.076]
+```
+
+#### 3. Vector search finds relevant chunks
+```json
+// MongoDB $vectorSearch results
+[
+  {
+    "content": "This report outlines the primary carbon reduction strategies implemented globally...",
+    "metadata": { "page": 1, "position": 0 },
+    "score": 0.92
+  },
+  {
+    "content": "The primary strategies for carbon reduction fall into five categories: 1) Renewable energy transition, 2) Energy efficiency improvements, 3) Carbon capture and storage, 4) Sustainable transportation, and 5) Reforestation initiatives...",
+    "metadata": { "page": 4, "position": 2 },
+    "score": 0.89
+  },
+  // 3 more chunks...
+]
+```
+
+#### 4. Relevant chunks form context for LLM
+```
+Context:
+1. This report outlines the primary carbon reduction strategies implemented globally...
+2. The primary strategies for carbon reduction fall into five categories: 1) Renewable energy transition, 2) Energy efficiency improvements, 3) Carbon capture and storage, 4) Sustainable transportation, and 5) Reforestation initiatives...
+3. Renewable energy transition represents the most significant opportunity...
+```
+
+#### 5. Mistral AI generates response
+```
+// LLM prompt
+Answer the following question based ONLY on the provided context:
+
+Context:
+[chunks from step 4]
+
+Question: What are the main carbon reduction strategies mentioned in the document?
+```
+
+#### 6. Response with citations
+```json
+// API response
+{
+  "answer": "According to the document, the main carbon reduction strategies are: 1) Renewable energy transition, 2) Energy efficiency improvements, 3) Carbon capture and storage, 4) Sustainable transportation, and 5) Reforestation initiatives.",
+  "citations": [
+    {
+      "id": 1,
+      "page": 4,
+      "text": "The primary strategies for carbon reduction fall into five categories: 1) Renewable energy transition, 2) Energy efficiency improvements, 3) Carbon capture and storage, 4) Sustainable transportation, and 5) Reforestation initiatives...",
+      "score": 0.89
+    },
+    {
+      "id": 2,
+      "page": 1, 
+      "text": "This report outlines the primary carbon reduction strategies implemented globally...",
+      "score": 0.92
+    }
+  ]
+}
+```
+
+#### 7. Chat history recorded
+```json
+// chatHistory collection entry
+{
+  "_id": ObjectId("60f3b3d2e6f7g8h9i0j1k2l3"),
+  "userId": "user123",
+  "documentId": ObjectId("60f3a2c1d4e5f6a7b8c9d001"),
+  "query": "What are the main carbon reduction strategies mentioned in the document?",
+  "answer": "According to the document, the main carbon reduction strategies are: 1) Renewable energy transition, 2) Energy efficiency improvements, 3) Carbon capture and storage, 4) Sustainable transportation, and 5) Reforestation initiatives.",
+  "citations": [
+    {
+      "id": 1,
+      "page": 4,
+      "text": "The primary strategies for carbon reduction fall into five categories...",
+      "score": 0.89
+    },
+    {
+      "id": 2,
+      "page": 1,
+      "text": "This report outlines the primary carbon reduction strategies...",
+      "score": 0.92
+    }
+  ],
+  "timestamp": "2025-03-13T11:30:15Z"
+}
+
+

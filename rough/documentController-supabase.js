@@ -1,42 +1,55 @@
 import { processPDF } from "../services/processingService.js";
 import { MongoClient, ObjectId } from "mongodb";
+import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import fs from "fs";
 import { promises as fsPromises } from "fs";
-import { v2 as cloudinary } from "cloudinary";
 dotenv.config();
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY,
+  {
+    global: {
+      fetch: (url, options = {}) => {
+        // Add the duplex option when a body exists
+        if (options.body) {
+          options.duplex = "half";
+        }
+        return fetch(url, options);
+      },
+    },
+  }
+);
 
+// Upload a document
 export const uploadDocument = async (req, res) => {
   try {
-    // Validate request
-    if (!req.file || !req.file.path) {
-      return res.status(400).json({ error: "No file uploaded" });
-    }
-
-    if (!req.body.fileName) {
-      return res.status(400).json({ error: "File name is required" });
-    }
-
     const filePath = req.file.path;
     const fileName = req.body.fileName;
     const userId = req.user.userId;
 
-    // Upload file to Cloudinary
-    const cloudinaryResult = await cloudinary.uploader.upload(filePath, {
-      resource_type: "raw",
-      folder: `pdfs/${userId}`,
-      public_id: `${Date.now()}_${fileName.replace(/\.[^/.]+$/, "")}`,
-      tags: ["pdf", "rag"],
-    });
+    const fileData = fs.createReadStream(filePath);
+    const filePathInBucket = `pdfs/${Date.now()}_${fileName}`;
 
-    const link = cloudinaryResult.secure_url;
+    const { data, error } = await supabase.storage
+      .from(process.env.SUPABASE_BUCKET)
+      .upload(filePathInBucket, fileData, {
+        contentType: "application/pdf",
+        cacheControl: "3600",
+        upsert: false,
+      });
 
-    // Process the PDF with Mistral
+    if (error) {
+      throw new Error("Failed to upload to Supabase: " + error.message);
+    }
+
+    const result = supabase.storage
+      .from(process.env.SUPABASE_BUCKET)
+      .getPublicUrl(filePathInBucket);
+
+    const link = result.data.publicUrl;
+
     const { docCount, documentId } = await processPDF(
       filePath,
       userId,
@@ -44,10 +57,12 @@ export const uploadDocument = async (req, res) => {
       link
     );
 
-    // Delete temporary file
-    await fsPromises.unlink(filePath).catch((deleteErr) => {
+    try {
+      await fsPromises.unlink(filePath);
+      console.log(`Temporary file deleted: ${filePath}`);
+    } catch (deleteErr) {
       console.warn(`Failed to delete temporary file ${filePath}:`, deleteErr);
-    });
+    }
 
     res.json({
       documentId,
@@ -61,6 +76,7 @@ export const uploadDocument = async (req, res) => {
   }
 };
 
+// Get all documents for a user
 export const getUserDocuments = async (req, res) => {
   const client = new MongoClient(process.env.MONGODB_URI);
 
@@ -94,6 +110,7 @@ export const getUserDocuments = async (req, res) => {
   }
 };
 
+// Get a single document by ID
 export const getDocumentById = async (req, res) => {
   const client = new MongoClient(process.env.MONGODB_URI);
 

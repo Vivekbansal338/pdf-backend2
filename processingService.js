@@ -8,7 +8,10 @@
 
 // async function processPDF(filePath, userId, documentName, link) {
 //   console.log(
-//     `Processing PDF: ${filePath}, User ID: ${userId}, Document Name: ${documentName}, Link: ${link}`
+//     "Processing PDF:",
+//     process.env.MISTRAL_API_KEY,
+//     process.env.MONGODB_URI,
+//     process.env.DB_NAME
 //   );
 
 //   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
@@ -33,23 +36,33 @@
 //     const docResult = await documentsCollection.insertOne(documentEntry);
 //     const documentId = docResult.insertedId;
 
-//     const fileContent = await fs.readFile(filePath);
-//     const uploaded_pdf = await mistral.files.upload({
-//       file: { fileName: path.basename(filePath), content: fileContent },
-//       purpose: "ocr",
-//     });
+//     // const fileContent = await fs.readFile(filePath);
+//     // const uploaded_pdf = await mistral.files.upload({
+//     //   file: { fileName: path.basename(filePath), content: fileContent },
+//     //   purpose: "ocr",
+//     // });
 
-//     const signedUrl = await mistral.files.getSignedUrl({
-//       fileId: uploaded_pdf.id,
-//     });
+//     // const signedUrl = await mistral.files.getSignedUrl({
+//     //   fileId: uploaded_pdf.id,
+//     // });
 
+//     // const ocrResponse = await mistral.ocr.process({
+//     //   model: "mistral-ocr-latest",
+//     //   document: {
+//     //     type: "document_url",
+//     //     documentUrl: signedUrl.url,
+//     //   },
+//     // });
 //     const ocrResponse = await mistral.ocr.process({
 //       model: "mistral-ocr-latest",
 //       document: {
 //         type: "document_url",
-//         documentUrl: signedUrl.url,
+//         documentUrl: link,
 //       },
+//       includeImageBase64: true,
 //     });
+
+//     console.log("OCR Response:", ocrResponse);
 
 //     const splitter = new RecursiveCharacterTextSplitter({
 //       chunkSize: 1000,
@@ -64,6 +77,10 @@
 //       for (let i = 0; i < ocrResponse.pages.length; i++) {
 //         const page = ocrResponse.pages[i];
 //         const pageContent = page.markdown || page.text;
+
+//         console.log("Page Content:", pageContent);
+//         console.log("page images", page.images.length, page.images);
+//         console.log("page dimensions", page.dimensions);
 
 //         if (pageContent) {
 //           textContent += pageContent + "\n\n";
@@ -154,6 +171,13 @@ import { MistralAIEmbeddings } from "@langchain/mistralai";
 import { MongoClient } from "mongodb";
 
 async function processPDF(filePath, userId, documentName, link) {
+  console.log(
+    "Processing PDF:",
+    process.env.MISTRAL_API_KEY,
+    process.env.MONGODB_URI,
+    process.env.DB_NAME
+  );
+
   const mistral = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
   const client = new MongoClient(process.env.MONGODB_URI);
   const dbName = process.env.DB_NAME || "pdf_rag";
@@ -169,7 +193,7 @@ async function processPDF(filePath, userId, documentName, link) {
     const documentEntry = {
       name: documentName,
       userId: userId,
-      originalFilename: documentName,
+      originalFilename: path.basename(filePath),
       uploadDate: new Date(),
       link: link,
       status: "processing",

@@ -5,6 +5,9 @@ import chatRoutes from "./src/routes/chatRoutes.js";
 import authRoutes from "./src/routes/authRoutes.js";
 import errorHandler from "./src/middleware/errorHandler.js";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 dotenv.config();
 
@@ -18,6 +21,9 @@ app.use(
 );
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve uploads directory as static
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Routes
 app.use("/api/auth", authRoutes);
