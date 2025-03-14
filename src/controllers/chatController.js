@@ -230,9 +230,11 @@ export const getChatImageById = async (req, res) => {
     const imagesCollection = db.collection("document_images");
     const userId = req.user.userId;
 
+    console.log("userId", userId);
+    console.log("imageId", imageId);
+
     const image = await imagesCollection.findOne({
       imageId: imageId,
-      userId: userId,
     });
 
     if (!image) {

@@ -208,54 +208,54 @@ async function processPDF(filePath, userId, documentName, link) {
 
         // Process images on the page
         const imageRefs = [];
-        if (page.images && page.images.length > 0) {
-          for (const image of page.images) {
-            totalImages++;
-            // console.log(image);
-            const imageId = `${documentId}_page${pageNumber}_img_${
-              image.id || totalImages
-            }`;
+        // if (page.images && page.images.length > 0) {
+        //   for (const image of page.images) {
+        //     totalImages++;
+        //     // console.log(image);
+        //     const imageId = `${documentId}_page${pageNumber}_img_${
+        //       image.id || totalImages
+        //     }`;
 
-            // Store image metadata and data
-            await imagesCollection.insertOne({
-              imageId,
-              documentId,
-              pageNumber,
-              fileName: image.id,
-              position: {
-                topLeft: { x: image.topLeftX, y: image.topLeftY },
-                bottomRight: {
-                  x: image.bottomRightX,
-                  y: image.bottomRightY,
-                },
-              },
-              dimensions: {
-                width: image.bottomRightX - image.topLeftX,
-                height: image.bottomRightY - image.topLeftY,
-              },
-              pagePosition: {
-                relativeTop: image.topLeftY / page.dimensions.height,
-                relativeLeft: image.topLeftX / page.dimensions.width,
-              },
-              pageDimensions: page.dimensions,
-              imageData: image.imageBase64,
-              createdAt: new Date(),
-            });
+        //     // Store image metadata and data
+        //     await imagesCollection.insertOne({
+        //       imageId,
+        //       documentId,
+        //       pageNumber,
+        //       fileName: image.id,
+        //       position: {
+        //         topLeft: { x: image.topLeftX, y: image.topLeftY },
+        //         bottomRight: {
+        //           x: image.bottomRightX,
+        //           y: image.bottomRightY,
+        //         },
+        //       },
+        //       dimensions: {
+        //         width: image.bottomRightX - image.topLeftX,
+        //         height: image.bottomRightY - image.topLeftY,
+        //       },
+        //       pagePosition: {
+        //         relativeTop: image.topLeftY / page.dimensions.height,
+        //         relativeLeft: image.topLeftX / page.dimensions.width,
+        //       },
+        //       pageDimensions: page.dimensions,
+        //       imageData: image.imageBase64,
+        //       createdAt: new Date(),
+        //     });
 
-            // Create reference to store with text
-            imageRefs.push({
-              imageId,
-              fileName: image.id,
-              position: {
-                topLeft: { x: image.topLeftX, y: image.topLeftY },
-                bottomRight: {
-                  x: image.bottomRightX,
-                  y: image.bottomRightY,
-                },
-              },
-            });
-          }
-        }
+        //     // Create reference to store with text
+        //     imageRefs.push({
+        //       imageId,
+        //       fileName: image.id,
+        //       position: {
+        //         topLeft: { x: image.topLeftX, y: image.topLeftY },
+        //         bottomRight: {
+        //           x: image.bottomRightX,
+        //           y: image.bottomRightY,
+        //         },
+        //       },
+        //     });
+        //   }
+        // }
 
         if (pageContent) {
           textContent += pageContent + "\n\n";
